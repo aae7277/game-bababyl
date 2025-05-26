@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Найди пары</title>
   <style>
     :root {
@@ -109,6 +109,36 @@
     .cell.matched .inner {
       visibility: hidden;
     }
+
+    #levelButtons {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 10px;
+      width: 100%;
+      max-width: 500px;
+      margin-top: 1em;
+    }
+
+    #levelButtons button {
+      font-size: 1.5em;
+      padding: 1em;
+      background: var(--card);
+      border: none;
+      border-radius: 1em;
+      cursor: pointer;
+      color: var(--bg);
+      transition: transform .1s;
+    }
+
+    #levelButtons button:hover {
+      transform: scale(1.05);
+    }
+
+    #levelButtons button.locked {
+      background: #ccc;
+      color: #888;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -119,125 +149,307 @@
     <button id="btnCheats">Читы</button>
   </div>
 
-  <div id="level" class="screen">
-    <div class="top">
-      <span id="coins">💰 0</span>
-      <span id="levelNum">Уровень 1</span>
-    </div>
-    <div id="grid" class="grid"></div>
+  <div id="levelSelect" class="screen">
+    <h2>Выбор уровня</h2>
+    <div id="levelButtons"></div>
+    <button id="btnBackToMenu">Назад</button>
   </div>
 
-  <!-- Звуки -->
-  <audio id="clickSound" src="https://www.soundjay.com/buttons/sounds/button-16.mp3"></audio>
-  <audio id="winSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3"></audio>
+  <div id="game" class="screen">
+    <div class="top">
+      <div>Уровень: <span id="level"></span></div>
+      <div>⏱ <span id="timer"></span>s</div>
+      <div>🥟 <span id="currency"></span></div>
+      <div>🔨 <span id="hammers"></span></div>
+    </div>
+    <div id="grid" class="grid"></div>
+    <div class="top">
+      <button id="btnUseHammer">Использовать молоток</button>
+      <button id="btnUseTime">+15 сек (15🥟)</button>
+      <button id="btnMenu1">В меню</button>
+    </div>
+  </div>
+
+  <div id="shop" class="screen">
+    <h2>Магазин</h2>
+    <div class="top">
+      <div>🥟 <span id="shopCurrency"></span></div>
+      <div>🔨 <span id="shopHammers"></span></div>
+    </div>
+    <button id="btnBuySkip">Пропуск уровня (10🥟)</button>
+    <button id="btnBuyHammer">Купить молоток (20🥟)</button>
+    <button id="btnBuyTime">Купить +30 сек (15🥟)</button>
+    <button id="btnMenu2">Назад</button>
+  </div>
+
+  <div id="cheats" class="screen">
+    <h2>Читы</h2>
+    <button id="btnAddCurrency">+100🥟</button>
+    <button id="btnSkip">Пропустить уровень</button>
+    <button id="btnToggleTimer">Таймер: <span id="cheatTimer"></span></button>
+    <button id="btnMenu3">Назад</button>
+  </div>
+
+  <audio id="audioClick" src="https://actions.google.com/sounds/v1/cartoon/woodpecker_tapping.ogg"></audio>
+  <audio id="soundMatch" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+  <audio id="soundNoMatch" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg"></audio>
+  <audio id="soundLevelUp" src="https://actions.google.com/sounds/v1/cartoon/clang.ogg"></audio>
 
   <script>
-    const menu = document.getElementById('menu');
-    const levelScreen = document.getElementById('level');
-    const btnLevelSelect = document.getElementById('btnLevelSelect');
-    const btnShop = document.getElementById('btnShop');
-    const btnCheats = document.getElementById('btnCheats');
-    const coinsSpan = document.getElementById('coins');
-    const levelNum = document.getElementById('levelNum');
-    const grid = document.getElementById('grid');
-    const clickSound = document.getElementById('clickSound');
-    const winSound = document.getElementById('winSound');
+    // Элементы
+    const menu = document.getElementById('menu'),
+          game = document.getElementById('game'),
+          shop = document.getElementById('shop'),
+          cheats = document.getElementById('cheats'),
+          levelSelect = document.getElementById('levelSelect'),
+          grid = document.getElementById('grid'),
+          levelButtons = document.getElementById('levelButtons');
 
-    let coins = 0;
-    let level = 1;
-    let first = null;
-    let lock = false;
+    const levelSpan = document.getElementById('level'),
+          timerSpan = document.getElementById('timer'),
+          curSpan = document.getElementById('currency'),
+          hamSpan = document.getElementById('hammers'),
+          shopCur = document.getElementById('shopCurrency'),
+          shopHam = document.getElementById('shopHammers'),
+          cheatTimerSpan = document.getElementById('cheatTimer');
 
-    function showScreen(screen) {
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      screen.classList.add('active');
+    const audioClick = document.getElementById('audioClick'),
+          soundMatch = document.getElementById('soundMatch'),
+          soundNoMatch = document.getElementById('soundNoMatch'),
+          soundLevelUp = document.getElementById('soundLevelUp');
+
+    // Кнопки
+    document.getElementById('btnLevelSelect').onclick = () => showLevelSelect();
+    document.getElementById('btnBackToMenu').onclick = () => show(menu);
+    document.getElementById('btnShop').onclick = () => show(shop);
+    document.getElementById('btnCheats').onclick = () => show(cheats);
+    document.getElementById('btnMenu1').onclick = () => show(menu);
+    document.getElementById('btnMenu2').onclick = () => show(menu);
+    document.getElementById('btnMenu3').onclick = () => show(menu);
+    document.getElementById('btnBuySkip').onclick = buySkip;
+    document.getElementById('btnBuyHammer').onclick = buyHammerItem;
+    document.getElementById('btnBuyTime').onclick = buyTimeItem;
+    document.getElementById('btnAddCurrency').onclick = () => addCurrency(100);
+    document.getElementById('btnSkip').onclick = skipLevel;
+    document.getElementById('btnToggleTimer').onclick = toggleTimer;
+    document.getElementById('btnUseHammer').onclick = useHammer;
+    document.getElementById('btnUseTime').onclick = useTime;
+
+    // Состояние
+    let level = +localStorage.getItem('level') || 1;
+    let currency = +localStorage.getItem('currency') || 0;
+    let hammers = +localStorage.getItem('hammers') || 0;
+    let extraTimes = +localStorage.getItem('extraTimes') || 0;
+    let disableTimer = localStorage.getItem('disableTimer') === 'true';
+    let first = null, second = null, lock = false, timerId, timeLeft;
+
+    function save() {
+      localStorage.setItem('level', level);
+      localStorage.setItem('currency', currency);
+      localStorage.setItem('hammers', hammers);
+      localStorage.setItem('extraTimes', extraTimes);
+      localStorage.setItem('disableTimer', disableTimer);
     }
 
-    btnLevelSelect.onclick = () => {
-      showScreen(levelScreen);
-      startLevel(level);
-    };
-
-    btnShop.onclick = () => {
-      alert("Магазин в разработке 🛒");
-    };
-
-    btnCheats.onclick = () => {
-      coins += 100;
+    function show(screen) {
+      [menu, game, shop, cheats, levelSelect].forEach(s => s.classList.remove('active'));
+      screen.classList.add('active');
       updateUI();
-      alert("Чит активирован! 💰 +100");
-    };
+    }
 
     function updateUI() {
-      coinsSpan.textContent = `💰 ${coins}`;
-      levelNum.textContent = `Уровень ${level}`;
+      levelSpan.textContent = level;
+      curSpan.textContent = currency;
+      hamSpan.textContent = hammers;
+      shopCur.textContent = currency;
+      shopHam.textContent = hammers;
+      cheatTimerSpan.textContent = disableTimer ? 'выкл' : 'вкл';
     }
 
-    function startLevel(n) {
-      updateUI();
-      grid.innerHTML = '';
-      const size = Math.min(4 + Math.floor(n / 2), 8); // растёт с уровнем
-      const total = (size * size) / 2;
-      const emojis = ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🦄','🐴','🐝','🐛','🦋','🐌','🐞'];
-      const chosen = [];
-      for (let i = 0; i < total; i++) {
-        chosen.push(emojis[i % emojis.length]);
+    function showLevelSelect() {
+      show(levelSelect);
+      levelButtons.innerHTML = '';
+      for (let i = 1; i <= 30; i++) {
+        const btn = document.createElement('button');
+        btn.textContent = i;
+        if (i <= level) {
+          btn.onclick = () => { level = i; save(); startGame(); };
+        } else {
+          btn.classList.add('locked');
+          btn.disabled = true;
+        }
+        levelButtons.appendChild(btn);
       }
-      const pairs = [...chosen, ...chosen].sort(() => Math.random() - 0.5);
+    }
 
+    function startGame() {
+      show(game);
+      buildLevel();
+    }
+
+    function buildLevel() {
+      grid.innerHTML = '';
+      first = second = null;
+      lock = false;
+      updateUI();
+      const size = 2 + Math.floor(level / 2);
+      const total = size * size;
+      const vals = [];
+      for (let i = 0; i < total / 2; i++) {
+        const code = 0x1F352 + i;
+        vals.push(code, code);
+      }
+      vals.sort(() => 0.5 - Math.random());
       grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-
-      pairs.forEach(symbol => {
+      vals.forEach(code => {
         const cell = document.createElement('div');
         cell.className = 'cell';
         const inner = document.createElement('div');
         inner.className = 'inner';
         const front = document.createElement('div');
         front.className = 'face front';
-        front.textContent = symbol;
+        front.textContent = '?';
         const back = document.createElement('div');
         back.className = 'face back';
+        back.textContent = String.fromCodePoint(code);
         inner.append(front, back);
-        cell.appendChild(inner);
-        cell.onclick = () => handleClick(cell, symbol);
+        cell.append(inner);
+        cell.onclick = () => {
+          if (!lock && !cell.classList.contains('matched') && !cell.classList.contains('revealed')) {
+            audioClick.play();
+            reveal(cell);
+          }
+        };
         grid.appendChild(cell);
       });
+      clearInterval(timerId);
+      if (!disableTimer) {
+        timeLeft = 60;
+        timerSpan.textContent = timeLeft;
+        timerId = setInterval(() => {
+          timeLeft--;
+          timerSpan.textContent = timeLeft;
+          if (timeLeft <= 0) {
+            clearInterval(timerId);
+            alert('Время вышло!');
+            show(menu);
+          }
+        }, 1000);
+      } else {
+        timerSpan.textContent = '∞';
+      }
     }
 
-    function handleClick(cell, symbol) {
-      if (lock || cell.classList.contains('revealed') || cell.classList.contains('matched')) return;
+    function reveal(cell) {
       cell.classList.add('revealed');
-      clickSound.currentTime = 0;
-      clickSound.play();
-
       if (!first) {
-        first = { cell, symbol };
-      } else {
+        first = cell;
+      } else if (!second) {
+        second = cell;
         lock = true;
         setTimeout(() => {
-          if (first.symbol === symbol) {
-            first.cell.classList.add('matched');
-            cell.classList.add('matched');
-            coins += 1;
-            if (document.querySelectorAll('.cell:not(.matched)').length === 2) {
-              winSound.play();
+          const val1 = first.querySelector('.back').textContent;
+          const val2 = second.querySelector('.back').textContent;
+          if (val1 === val2) {
+            first.classList.add('matched');
+            second.classList.add('matched');
+            soundMatch.play();
+            if (document.querySelectorAll('.matched').length === grid.children.length) {
+              soundLevelUp.play();
               level++;
-              setTimeout(() => startLevel(level), 1000);
+              currency += 5;
+              save();
+              startGame();
             }
           } else {
-            first.cell.classList.remove('revealed');
-            cell.classList.remove('revealed');
+            first.classList.remove('revealed');
+            second.classList.remove('revealed');
+            soundNoMatch.play();
           }
-          first = null;
+          first = second = null;
           lock = false;
           updateUI();
         }, 800);
       }
     }
 
-    // Автозапуск уровня
-    // showScreen(levelScreen);
-    // startLevel(level);
+    function buySkip() {
+      if (currency >= 10) {
+        currency -= 10;
+        level++;
+        save();
+        startGame();
+      } else alert('Недостаточно 🥟');
+    }
+
+    function buyHammerItem() {
+      if (currency >= 20) {
+        currency -= 20;
+        hammers++;
+        save();
+        updateUI();
+      } else alert('Недостаточно 🥟');
+    }
+
+    function buyTimeItem() {
+      if (currency >= 15) {
+        currency -= 15;
+        extraTimes++;
+        save();
+        updateUI();
+      } else alert('Недостаточно 🥟');
+    }
+
+    function useHammer() {
+      if (hammers > 0) {
+        hammers--;
+        save();
+        updateUI();
+        const unmatched = [...grid.querySelectorAll('.cell:not(.matched):not(.revealed)')];
+        for (let i = 0; i < unmatched.length; i++) {
+          const c1 = unmatched[i].querySelector('.back').textContent;
+          for (let j = i + 1; j < unmatched.length; j++) {
+            const c2 = unmatched[j].querySelector('.back').textContent;
+            if (c1 === c2) {
+              unmatched[i].classList.add('revealed');
+              unmatched[j].classList.add('revealed');
+              return;
+            }
+          }
+        }
+      } else alert('Нет молотков');
+    }
+
+    function useTime() {
+      if (extraTimes > 0) {
+        extraTimes--;
+        clearInterval(timerId);
+        timeLeft += 15;
+        timerSpan.textContent = timeLeft;
+        save();
+        updateUI();
+      } else alert('Нет бонусов времени');
+    }
+
+    function addCurrency(a) {
+      currency += a;
+      save();
+      updateUI();
+    }
+
+    function skipLevel() {
+      level++;
+      save();
+      startGame();
+    }
+
+    function toggleTimer() {
+      disableTimer = !disableTimer;
+      save();
+      updateUI();
+    }
+
+    show(menu);
   </script>
 </body>
 </html>
