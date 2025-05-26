@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Найди пары</title>
+  <style>
+    :root {
+      --bg: #1e293b;
+      --card: #facc15;
+      --card-back: #f8fafc;
+      --text: #f8fafc;
+      --accent: #38bdf8;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 600px;
+      padding: 1em;
+      text-align: center;
+    }
+    .active {
+      display: flex;
+    }
+    h1, h2 {
+      margin: 0.5em 0;
+    }
+    button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 1em 2em;
+      margin: 0.5em;
+      border-radius: 1em;
+      cursor: pointer;
+      transition: transform .1s;
+      font-size: 1.5em;
+    }
+    button:hover {
+      transform: scale(1.05);
+    }
+    .top {
+      display: flex;
+      gap: 1em;
+      font-size: 1.2em;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .grid {
+      display: grid;
+      gap: 10px;
+    }
+    .cell {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      cursor: pointer;
+      perspective: 400px;
+    }
+    .inner {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      transition: transform .4s;
+      transform-style: preserve-3d;
+    }
+    .cell.revealed .inner {
+      transform: rotateY(180deg);
+    }
+    .face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.5em;
+      font-size: 1.5em;
+    }
+    .front {
+      background: var(--card);
+      color: var(--bg);
+    }
+    .back {
+      background: var(--card-back);
+      color: var(--bg);
+      transform: rotateY(180deg);
+    }
+    .cell.matched .inner {
+      visibility: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="menu" class="screen active">
+    <h1>Найди пары</h1>
+    <button id="btnLevelSelect">Выбрать уровень</button>
+    <button id="btnShop">Магазин</button>
+    <button id="btnCheats">Читы</button>
+  </div>
+
+  <div id="level" class="screen">
+    <div class="top">
+      <span id="coins">💰 0</span>
+      <span id="levelNum">Уровень 1</span>
+    </div>
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <!-- Звуки -->
+  <audio id="clickSound" src="https://www.soundjay.com/buttons/sounds/button-16.mp3"></audio>
+  <audio id="winSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3"></audio>
+
+  <script>
+    const menu = document.getElementById('menu');
+    const levelScreen = document.getElementById('level');
+    const btnLevelSelect = document.getElementById('btnLevelSelect');
+    const btnShop = document.getElementById('btnShop');
+    const btnCheats = document.getElementById('btnCheats');
+    const coinsSpan = document.getElementById('coins');
+    const levelNum = document.getElementById('levelNum');
+    const grid = document.getElementById('grid');
+    const clickSound = document.getElementById('clickSound');
+    const winSound = document.getElementById('winSound');
+
+    let coins = 0;
+    let level = 1;
+    let first = null;
+    let lock = false;
+
+    function showScreen(screen) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      screen.classList.add('active');
+    }
+
+    btnLevelSelect.onclick = () => {
+      showScreen(levelScreen);
+      startLevel(level);
+    };
+
+    btnShop.onclick = () => {
+      alert("Магазин в разработке 🛒");
+    };
+
+    btnCheats.onclick = () => {
+      coins += 100;
+      updateUI();
+      alert("Чит активирован! 💰 +100");
+    };
+
+    function updateUI() {
+      coinsSpan.textContent = `💰 ${coins}`;
+      levelNum.textContent = `Уровень ${level}`;
+    }
+
+    function startLevel(n) {
+      updateUI();
+      grid.innerHTML = '';
+      const size = Math.min(4 + Math.floor(n / 2), 8); // растёт с уровнем
+      const total = (size * size) / 2;
+      const emojis = ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🦄','🐴','🐝','🐛','🦋','🐌','🐞'];
+      const chosen = [];
+      for (let i = 0; i < total; i++) {
+        chosen.push(emojis[i % emojis.length]);
+      }
+      const pairs = [...chosen, ...chosen].sort(() => Math.random() - 0.5);
+
+      grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+
+      pairs.forEach(symbol => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const inner = document.createElement('div');
+        inner.className = 'inner';
+        const front = document.createElement('div');
+        front.className = 'face front';
+        front.textContent = symbol;
+        const back = document.createElement('div');
+        back.className = 'face back';
+        inner.append(front, back);
+        cell.appendChild(inner);
+        cell.onclick = () => handleClick(cell, symbol);
+        grid.appendChild(cell);
+      });
+    }
+
+    function handleClick(cell, symbol) {
+      if (lock || cell.classList.contains('revealed') || cell.classList.contains('matched')) return;
+      cell.classList.add('revealed');
+      clickSound.currentTime = 0;
+      clickSound.play();
+
+      if (!first) {
+        first = { cell, symbol };
+      } else {
+        lock = true;
+        setTimeout(() => {
+          if (first.symbol === symbol) {
+            first.cell.classList.add('matched');
+            cell.classList.add('matched');
+            coins += 1;
+            if (document.querySelectorAll('.cell:not(.matched)').length === 2) {
+              winSound.play();
+              level++;
+              setTimeout(() => startLevel(level), 1000);
+            }
+          } else {
+            first.cell.classList.remove('revealed');
+            cell.classList.remove('revealed');
+          }
+          first = null;
+          lock = false;
+          updateUI();
+        }, 800);
+      }
+    }
+
+    // Автозапуск уровня
+    // showScreen(levelScreen);
+    // startLevel(level);
+  </script>
+</body>
+</html>
